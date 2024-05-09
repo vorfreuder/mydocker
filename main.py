@@ -1,4 +1,7 @@
 import argparse
+import os
+import shutil
+import tarfile
 
 from container import *
 
@@ -60,4 +63,11 @@ if args.subcommand == "run":
     con.run()
 elif args.subcommand == "init":
     con = Container(args.command)
+    busybox_path = os.path.join(os.path.dirname(__file__), "busybox.tar")
+    dst_path = os.path.join(os.path.dirname(__file__), "busybox")
+    if os.path.exists(dst_path):
+        shutil.rmtree(dst_path)
+    with tarfile.open(busybox_path, "r") as tar:
+        tar.extractall(dst_path)
+    os.chdir(dst_path)
     con.init()

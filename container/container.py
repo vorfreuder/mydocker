@@ -4,7 +4,19 @@ import sys
 import uuid
 
 from .cgroup_manager import CgroupManager
-from .libc import MS_NODEV, MS_NOEXEC, MS_NOSUID, MS_PRIVATE, MS_REC, mount
+from .libc import (
+    MNT_DETACH,
+    MS_BIND,
+    MS_NODEV,
+    MS_NOEXEC,
+    MS_NOSUID,
+    MS_PRIVATE,
+    MS_REC,
+    MS_STRICTATIME,
+    mount,
+    pivot_root,
+    umount,
+)
 
 
 class Container:
@@ -41,7 +53,6 @@ class Container:
             # | os.CLONE_NEWUSER
         )
         pid = os.fork()
-        print(f"[*] fork pid: {pid}")
         if pid == 0:
             if not self.tty:
                 print("not tty")
@@ -60,13 +71,43 @@ class Container:
                 fd = os.open(ns_path, os.O_RDONLY)
                 os.setns(fd)
                 os.close(fd)
-            print(f"[*] child pid: {pid}")
             os.waitpid(pid, 0)
-            print(f"[*] child exit")
             cgroup_manager.remove()
 
     def init(self):
-        mount("", "/", "", MS_PRIVATE | MS_REC, "")
-        mount("none", "/proc", "proc", MS_NOEXEC | MS_NOSUID | MS_NODEV)
+        self.setUpMount()
         cmd = self.cmd
         os.execve(cmd[0], cmd, os.environ)
+
+    def setUpMount(self):
+        # systemd 加入linux之后, mount namespace 就变成 shared by default, 所以你必须显示
+        # 声明你要这个新的mount namespace独立。
+        # 如果不先做 private mount，会导致挂载事件外泄，后续执行 pivotRoot 会出现 invalid argument 错误
+        mount("", "/", "", MS_PRIVATE | MS_REC)
+        self.pivotRoot(os.getcwd())
+        # mount /proc
+        mount("none", "/proc", "proc", MS_NOEXEC | MS_NOSUID | MS_NODEV)
+        # 由于前面 pivotRoot 切换了 rootfs，因此这里重新 mount 一下 /dev 目录
+        # tmpfs 是基于 件系 使用 RAM、swap 分区来存储。
+        # 不挂载 /dev，会导致容器内部无法访问和使用许多设备，这可能导致系统无法正常工作
+        mount("tmpfs", "/dev", "tmpfs", MS_NOSUID | MS_STRICTATIME)
+
+    def pivotRoot(self, root):
+        # 注意：PivotRoot调用有限制，newRoot和oldRoot不能在同一个文件系统下。
+        # 因此，为了使当前root的老root和新root不在同一个文件系统下，这里把root重新mount了一次。
+        # bind mount是把相同的内容换了一个挂载点的挂载方法
+        mount(root, root, "bind", MS_BIND | MS_REC)
+        # 创建 rootfs/.pivot_root 目录用于存储 old_root
+        pivotDir = os.path.join(root, ".pivot_root")
+        os.mkdir(pivotDir, mode=0o777)
+        # 执行pivot_root调用,将系统rootfs切换到新的rootfs,
+        # PivotRoot调用会把 old_root挂载到pivotDir,也就是rootfs/.pivot_root,挂载点现在依然可以在mount命令中看到
+        pivot_root(root, pivotDir)
+        # 修改当前的工作目录到根目录
+        os.chdir("/")
+        # 最后再把old_root umount了，即 umount rootfs/.pivot_root
+        # 由于当前已经是在 rootfs 下了，就不能再用上面的rootfs/.pivot_root这个路径了,现在直接用/.pivot_root这个路径即可
+        pivotDir = os.path.join("/", ".pivot_root")
+        # umount(pivotDir, MNT_DETACH)不知道为什么会导致后面没法挂载/proc
+        os.system(f"umount {pivotDir} -l")
+        os.rmdir(pivotDir)
