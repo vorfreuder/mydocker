@@ -14,11 +14,18 @@ run_parser = subparsers.add_parser(
     "run",
     help="Create a container with namespace and cgroups limit",
 )
-run_parser.add_argument(
+run_group = run_parser.add_mutually_exclusive_group()
+run_group.add_argument(
     # 简单起见，这里把 -i 和 -t 参数合并成一个
     "-it",
     action="store_true",
     help="enable tty",
+)
+run_group.add_argument(
+    # 后台运行容器
+    "-d",
+    action="store_true",
+    help="detach container",
 )
 run_parser.add_argument(
     # 限制进程内存使用量

@@ -10,7 +10,7 @@ from .cgroup_manager import CgroupManager
 
 
 class Container:
-    def __init__(self, command, volume=None, resource_config={}, tty=True) -> None:
+    def __init__(self, command, volume=None, resource_config={}, tty=False) -> None:
         if command is str:
             command = command.split()
         self.cmd = command
@@ -63,6 +63,8 @@ class Container:
                 fd = os.open(ns_path, os.O_RDONLY)
                 os.setns(fd)
                 os.close(fd)
+            if not self.tty:
+                return
             os.waitpid(pid, 0)
             cgroup_manager.remove()
             self.delete_work_space()
