@@ -1,22 +1,12 @@
 import os
 import shutil
 import sys
+import tarfile
 import uuid
 
+from utility import *
+
 from .cgroup_manager import CgroupManager
-from .libc import (
-    MNT_DETACH,
-    MS_BIND,
-    MS_NODEV,
-    MS_NOEXEC,
-    MS_NOSUID,
-    MS_PRIVATE,
-    MS_REC,
-    MS_STRICTATIME,
-    mount,
-    pivot_root,
-    umount,
-)
 
 
 class Container:
@@ -44,6 +34,7 @@ class Container:
         print("id:", self.id)
         # cgroup限制资源
         cgroup_manager = CgroupManager(self.id)
+        self.new_work_space()
         os.unshare(
             os.CLONE_NEWUTS
             | os.CLONE_NEWPID
@@ -73,6 +64,7 @@ class Container:
                 os.close(fd)
             os.waitpid(pid, 0)
             cgroup_manager.remove()
+            self.delete_work_space()
 
     def init(self):
         self.setUpMount()
@@ -111,3 +103,41 @@ class Container:
         # umount(pivotDir, MNT_DETACH)不知道为什么会导致后面没法挂载/proc
         os.system(f"umount {pivotDir} -l")
         os.rmdir(pivotDir)
+
+    def new_work_space(self):
+        root_url = os.path.join(base_path, "root")
+        if os.path.exists(root_url):
+            shutil.rmtree(root_url)
+        os.mkdir(root_url, mode=0o777)
+        # create lower
+        busybox_path = os.path.join(base_path, "busybox.tar")
+        lower_path = os.path.join(root_url, "lower")
+        if not os.path.exists(lower_path):
+            os.mkdir(lower_path, mode=0o777)
+            with tarfile.open(busybox_path, "r") as tar:
+                tar.extractall(lower_path)
+        # create upper、worker
+        upper_path = os.path.join(root_url, "upper")
+        os.mkdir(upper_path, mode=0o777)
+        work_path = os.path.join(root_url, "work")
+        os.mkdir(work_path, mode=0o777)
+        # mount overlayfs
+        mnt_url = os.path.join(root_url, "merged")
+        os.mkdir(mnt_url, mode=0o777)
+        # mount -t overlay overlay -o lowerdir=lower1:lower2:lower3,upperdir=upper,workdir=work merged
+        os.system(
+            f"mount -t overlay overlay -o lowerdir={lower_path},upperdir={upper_path},workdir={work_path} {mnt_url}/"
+        )
+        os.chdir(mnt_url)
+
+    def delete_work_space(self):
+        root_url = os.path.join(base_path, "root")
+        mnt_url = os.path.join(root_url, "merged")
+        # unmount overlayfs：将../root/merged目录挂载解除
+        os.system(f"umount {mnt_url}")
+        shutil.rmtree(mnt_url)
+        # 删除其他目录：删除之前为 overlayfs 准备的 upper、work、merged 目录
+        upper_path = os.path.join(root_url, "upper")
+        shutil.rmtree(upper_path)
+        work_path = os.path.join(root_url, "work")
+        shutil.rmtree(work_path)

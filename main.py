@@ -58,16 +58,11 @@ args = parser.parse_args()
 print(args)
 if args.subcommand == "run":
     con = Container(
-        args.command, {"cpu": args.cpu, "cpuset": args.cpuset, "mem": args.mem}, args.it
+        args.command,
+        {"cpu": args.cpu, "cpuset": args.cpuset, "mem": args.mem},
+        args.it,
     )
     con.run()
 elif args.subcommand == "init":
     con = Container(args.command)
-    busybox_path = os.path.join(os.path.dirname(__file__), "busybox.tar")
-    dst_path = os.path.join(os.path.dirname(__file__), "busybox")
-    if os.path.exists(dst_path):
-        shutil.rmtree(dst_path)
-    with tarfile.open(busybox_path, "r") as tar:
-        tar.extractall(dst_path)
-    os.chdir(dst_path)
     con.init()
