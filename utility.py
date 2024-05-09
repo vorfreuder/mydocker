@@ -54,3 +54,4 @@ def pivot_root(new_root, put_old):
 
 
 base_path = os.path.dirname(__file__)
+info_path = os.path.join(base_path, "info")

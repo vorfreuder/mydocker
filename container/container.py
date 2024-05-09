@@ -1,16 +1,21 @@
+import json
 import os
 import shutil
 import sys
 import tarfile
 import uuid
+from datetime import datetime
 
+from tabulate import tabulate
 from utility import *
 
 from .cgroup_manager import CgroupManager
 
 
 class Container:
-    def __init__(self, command, volume=None, resource_config={}, tty=False) -> None:
+    def __init__(
+        self, command, container_name=None, volume=None, resource_config={}, tty=False
+    ) -> None:
         if command is str:
             command = command.split()
         self.cmd = command
@@ -23,6 +28,9 @@ class Container:
         self.resource_config = resource_config
         self.tty = tty
         self.id = str(uuid.uuid4())
+        self.container_name = container_name
+        if container_name is None:
+            self.container_name = self.id
 
     def run(self):
         f = open("/proc/self/cmdline")
@@ -63,11 +71,14 @@ class Container:
                 fd = os.open(ns_path, os.O_RDONLY)
                 os.setns(fd)
                 os.close(fd)
+            self.pid = pid
+            self.record_container_info()
             if not self.tty:
                 return
             os.waitpid(pid, 0)
             cgroup_manager.remove()
             self.delete_work_space()
+            self.delete_container_info()
 
     def init(self):
         self.setUpMount()
@@ -172,3 +183,40 @@ class Container:
         image_url = os.path.join(base_path, "root", f"{image_name}.tar")
         with tarfile.open(image_url, "w") as tar:
             tar.add(mnt_url, arcname=".")
+
+    def record_container_info(self):
+        container_info = {
+            "ID": self.id,
+            "PID": self.pid,
+            "COMMAND": " ".join(self.cmd),
+            "CREATE_TIME": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "STATUS": "running",
+            "NAME": self.container_name,
+        }
+        path = os.path.join(info_path, self.id)
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, "config.json"), "w") as json_file:
+            json.dump(container_info, json_file, indent=4)
+
+    def delete_container_info(self):
+        path = os.path.join(info_path, self.id)
+        shutil.rmtree(path)
+
+    @staticmethod
+    def ps():
+        header = [
+            "ID",
+            "PID",
+            "COMMAND",
+            "CREATE_TIME",
+            "STATUS",
+            "NAME",
+        ]
+        data = []
+        for container_id in os.listdir(info_path):
+            with open(
+                os.path.join(info_path, container_id, "config.json")
+            ) as json_file:
+                container_info = json.load(json_file)
+                data.append([str(container_info[field]) for field in header])
+        print(tabulate(data, headers=header))

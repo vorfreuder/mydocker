@@ -53,6 +53,11 @@ run_parser.add_argument(
     help="volume,e.g.: -v /ect/conf:/etc/conf",
 )
 run_parser.add_argument(
+    "-name",
+    default=None,
+    help="container name",
+)
+run_parser.add_argument(
     "command",
     nargs="+",
     help="Command to run in the container",
@@ -71,11 +76,14 @@ init_parser.add_argument(
 commit_parser = subparsers.add_parser("commit", help="commit container to image")
 commit_parser.add_argument("image_name")
 
+ps_parser = subparsers.add_parser("ps", help="list all the containers")
+
 args = parser.parse_args()
 print(args)
 if args.subcommand == "run":
     con = Container(
         args.command,
+        args.name,
         args.v,
         {"cpu": args.cpu, "cpuset": args.cpuset, "mem": args.mem},
         args.it,
@@ -86,3 +94,5 @@ elif args.subcommand == "init":
     con.init()
 elif args.subcommand == "commit":
     Container.commit(args.image_name)
+elif args.subcommand == "ps":
+    Container.ps()
