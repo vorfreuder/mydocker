@@ -10,7 +10,7 @@ from .cgroup_manager import CgroupManager
 
 
 class Container:
-    def __init__(self, command, resource_config={}, tty=True) -> None:
+    def __init__(self, command, volume=None, resource_config={}, tty=True) -> None:
         if command is str:
             command = command.split()
         self.cmd = command
@@ -19,6 +19,7 @@ class Container:
             print(f"未找到命令 {' '.join(self.cmd)}")
             sys.exit(1)
         self.cmd[0] = cmd_path
+        self.volume = volume
         self.resource_config = resource_config
         self.tty = tty
         self.id = str(uuid.uuid4())
@@ -104,6 +105,13 @@ class Container:
         os.system(f"umount {pivotDir} -l")
         os.rmdir(pivotDir)
 
+    def volume_extract(self, volume):
+        volume_path = volume.split(":")
+        if len(volume_path) != 2:
+            print("volume格式错误")
+            sys.exit(1)
+        return volume_path[0], volume_path[1]
+
     def new_work_space(self):
         root_url = os.path.join(base_path, "root")
         if os.path.exists(root_url):
@@ -129,10 +137,24 @@ class Container:
             f"mount -t overlay overlay -o lowerdir={lower_path},upperdir={upper_path},workdir={work_path} {mnt_url}/"
         )
         os.chdir(mnt_url)
+        # 如果指定了volume则还需要mount volume
+        if self.volume:
+            host_path, container_path = self.volume_extract(self.volume)
+            container_path = container_path.strip("/")
+            # 通过bind mount 将宿主机目录挂载到容器目录
+            os.makedirs(host_path, mode=0o777, exist_ok=True)
+            container_path = os.path.join(mnt_url, container_path)
+            os.makedirs(container_path, mode=0o777, exist_ok=True)
+            os.system(f"mount -o bind {host_path} {container_path}")
 
     def delete_work_space(self):
         root_url = os.path.join(base_path, "root")
         mnt_url = os.path.join(root_url, "merged")
+        # 一定要要先 umount volume ，然后再删除目录，否则由于 bind mount 存在，删除临时目录会导致 volume 目录中的数据丢失
+        if self.volume:
+            host_path, container_path = self.volume_extract(self.volume)
+            container_path = os.path.join(mnt_url, container_path.strip("/"))
+            os.system(f"umount {container_path}")
         # unmount overlayfs：将../root/merged目录挂载解除
         os.system(f"umount {mnt_url}")
         shutil.rmtree(mnt_url)

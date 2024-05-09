@@ -40,6 +40,12 @@ run_parser.add_argument(
     help="cpuset limit,e.g.: -cpuset 2,4",
 )
 run_parser.add_argument(
+    # 数据卷
+    "-v",
+    default=None,
+    help="volume,e.g.: -v /ect/conf:/etc/conf",
+)
+run_parser.add_argument(
     "command",
     nargs="+",
     help="Command to run in the container",
@@ -59,6 +65,7 @@ print(args)
 if args.subcommand == "run":
     con = Container(
         args.command,
+        args.v,
         {"cpu": args.cpu, "cpuset": args.cpuset, "mem": args.mem},
         args.it,
     )
