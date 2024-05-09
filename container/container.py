@@ -163,3 +163,10 @@ class Container:
         shutil.rmtree(upper_path)
         work_path = os.path.join(root_url, "work")
         shutil.rmtree(work_path)
+
+    @staticmethod
+    def commit(image_name):
+        mnt_url = os.path.join(base_path, "root", "merged")
+        image_url = os.path.join(base_path, "root", f"{image_name}.tar")
+        with tarfile.open(image_url, "w") as tar:
+            tar.add(mnt_url, arcname=".")

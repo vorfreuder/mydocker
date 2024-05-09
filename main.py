@@ -60,6 +60,10 @@ init_parser.add_argument(
     nargs="+",
     help="Command to run in the container",
 )
+
+commit_parser = subparsers.add_parser("commit", help="commit container to image")
+commit_parser.add_argument("image_name")
+
 args = parser.parse_args()
 print(args)
 if args.subcommand == "run":
@@ -73,3 +77,5 @@ if args.subcommand == "run":
 elif args.subcommand == "init":
     con = Container(args.command)
     con.init()
+elif args.subcommand == "commit":
+    Container.commit(args.image_name)
