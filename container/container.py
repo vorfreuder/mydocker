@@ -52,9 +52,9 @@ class Container:
             | os.CLONE_NEWIPC
             # | os.CLONE_NEWUSER
         )
+        print(f"container_id: {self.container_id}")
         pid = os.fork()
         if pid == 0:
-            print(f"pid: {pid} container_id: {self.container_id}")
             if not self.tty:
                 print("not tty")
                 fd_path = os.path.join(info_path, self.container_id)
@@ -277,3 +277,14 @@ class Container:
         container_info["PID"] = ""
         container_info["STATUS"] = "stopped"
         Container.set_container_info(container_id, container_info)
+
+    @staticmethod
+    def rm(container_id, force=False):
+        container_info = Container.get_info_by_container_id(container_id)
+        status = container_info["STATUS"]
+        if status == "running":
+            if not force:
+                print("container is running, please stop it first")
+                return
+            Container.stop(container_id)
+        shutil.rmtree(os.path.join(info_path, container_id))

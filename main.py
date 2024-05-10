@@ -85,6 +85,10 @@ exec_parser.add_argument("command", nargs="+")
 stop_parser = subparsers.add_parser("stop", help="stop a container")
 stop_parser.add_argument("container_id")
 
+rm_parser = subparsers.add_parser("rm", help="remove unused containers")
+rm_parser.add_argument("-f", action="store_true", help="force delete running container")
+rm_parser.add_argument("container_id")
+
 args = parser.parse_args()
 print(args)
 if args.subcommand == "run":
@@ -109,3 +113,5 @@ elif args.subcommand == "exec":
     Container.exec(args.container_id, args.command)
 elif args.subcommand == "stop":
     Container.stop(args.container_id)
+elif args.subcommand == "rm":
+    Container.rm(args.container_id, args.f)
