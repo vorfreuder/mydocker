@@ -81,6 +81,10 @@ ps_parser = subparsers.add_parser("ps", help="list all the containers")
 logs_parser = subparsers.add_parser("logs", help="print logs of a container")
 logs_parser.add_argument("container_name")
 
+exec_parser = subparsers.add_parser("exec", help="exec a command into container")
+exec_parser.add_argument("container_name")
+exec_parser.add_argument("command", nargs="+")
+
 args = parser.parse_args()
 print(args)
 if args.subcommand == "run":
@@ -101,3 +105,5 @@ elif args.subcommand == "ps":
     Container.ps()
 elif args.subcommand == "logs":
     Container.logs(args.container_name)
+elif args.subcommand == "exec":
+    Container.exec(args.container_name, args.command)

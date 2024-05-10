@@ -235,3 +235,20 @@ class Container:
         with open(log_path) as f:
             for line in f:
                 print(line, end="")
+
+    @staticmethod
+    def exec(container_name, command):
+        container_path = os.path.join(info_path, container_name)
+        with open(os.path.join(container_path, "config.json")) as json_file:
+            container_info = json.load(json_file)
+        pid = container_info["PID"]
+        # os.system(f"nsenter --target {pid} --mount --uts --ipc --net --pid {command}")
+        ns = ["ipc", "mnt", "net", "pid", "uts"]
+        for ns_file in os.listdir(f"/proc/{pid}/ns"):
+            if ns_file not in ns:
+                continue
+            ns_path = os.path.join(f"/proc/{pid}/ns", ns_file)
+            fd = os.open(ns_path, os.O_RDONLY)
+            os.setns(fd)
+            os.close(fd)
+        os.execve(command[0], command, os.environ)
