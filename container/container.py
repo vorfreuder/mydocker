@@ -28,10 +28,10 @@ class Container:
         self.volume = volume
         self.resource_config = resource_config
         self.tty = tty
-        self.id = "".join(str(uuid.uuid4()).split("-"))[:10]
+        self.container_id = "".join(str(uuid.uuid4()).split("-"))[:10]
         self.container_name = container_name
         if container_name is None:
-            self.container_name = self.id
+            self.container_name = self.container_id
 
     def run(self):
         f = open("/proc/self/cmdline")
@@ -40,11 +40,10 @@ class Container:
         cmd.append("init")
         cmd.append("--")  # 用于区分命令
         cmd.extend(self.cmd)
-
-        print("id:", self.id)
         # cgroup限制资源
-        cgroup_manager = CgroupManager(self.id)
+        cgroup_manager = CgroupManager(self.container_id)
         self.new_work_space()
+        # 新的命名空间
         os.unshare(
             os.CLONE_NEWUTS
             | os.CLONE_NEWPID
@@ -55,12 +54,13 @@ class Container:
         )
         pid = os.fork()
         if pid == 0:
+            print(f"pid: {pid} container_id: {self.container_id}")
             if not self.tty:
                 print("not tty")
-                fd_path = os.path.join(info_path, self.container_name)
+                fd_path = os.path.join(info_path, self.container_id)
                 os.makedirs(fd_path, exist_ok=True)
                 fd = os.open(
-                    os.path.join(fd_path, self.container_name + "-json.log"),
+                    os.path.join(fd_path, self.container_id + "-json.log"),
                     os.O_RDWR | os.O_CREAT,
                 )
                 os.dup2(fd, 0)  # 重定向标准输入
@@ -203,17 +203,17 @@ class Container:
 
     def record_container_info(self):
         container_info = {
-            "ID": self.id,
+            "ID": self.container_id,
             "PID": self.pid,
             "COMMAND": " ".join(self.cmd),
             "CREATE_TIME": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "STATUS": "running",
             "NAME": self.container_name,
         }
-        Container.set_container_info(self.id, container_info)
+        Container.set_container_info(self.container_id, container_info)
 
     def delete_container_info(self):
-        path = os.path.join(info_path, self.id)
+        path = os.path.join(info_path, self.container_id)
         shutil.rmtree(path)
 
     @staticmethod
@@ -236,8 +236,8 @@ class Container:
         print(tabulate(data, headers=header))
 
     @staticmethod
-    def logs(container_name):
-        log_path = os.path.join(info_path, container_name, container_name + "-json.log")
+    def logs(container_id):
+        log_path = os.path.join(info_path, container_id, container_id + "-json.log")
         if not os.path.exists(log_path):
             print("no logs available")
             return
@@ -256,8 +256,8 @@ class Container:
         return container_info
 
     @staticmethod
-    def exec(container_name, command):
-        pid = Container.get_info_by_container_id(container_name)["PID"]
+    def exec(container_id, command):
+        pid = Container.get_info_by_container_id(container_id)["PID"]
         # os.system(f"nsenter --target {pid} --mount --uts --ipc --net --pid {command}")
         ns = ["ipc", "mnt", "net", "pid", "uts"]
         for ns_file in os.listdir(f"/proc/{pid}/ns"):
@@ -270,10 +270,10 @@ class Container:
         os.execve(command[0], command, os.environ)
 
     @staticmethod
-    def stop(container_name):
-        container_info = Container.get_info_by_container_id(container_name)
+    def stop(container_id):
+        container_info = Container.get_info_by_container_id(container_id)
         pid = container_info["PID"]
         os.kill(pid, signal.SIGKILL)
         container_info["PID"] = ""
         container_info["STATUS"] = "stopped"
-        Container.set_container_info(container_name, container_info)
+        Container.set_container_info(container_id, container_info)

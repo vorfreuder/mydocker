@@ -1,7 +1,4 @@
 import argparse
-import os
-import shutil
-import tarfile
 
 from container import *
 
@@ -79,14 +76,14 @@ commit_parser.add_argument("image_name")
 ps_parser = subparsers.add_parser("ps", help="list all the containers")
 
 logs_parser = subparsers.add_parser("logs", help="print logs of a container")
-logs_parser.add_argument("container_name")
+logs_parser.add_argument("container_id")
 
 exec_parser = subparsers.add_parser("exec", help="exec a command into container")
-exec_parser.add_argument("container_name")
+exec_parser.add_argument("container_id")
 exec_parser.add_argument("command", nargs="+")
 
 stop_parser = subparsers.add_parser("stop", help="stop a container")
-stop_parser.add_argument("container_name")
+stop_parser.add_argument("container_id")
 
 args = parser.parse_args()
 print(args)
@@ -107,8 +104,8 @@ elif args.subcommand == "commit":
 elif args.subcommand == "ps":
     Container.ps()
 elif args.subcommand == "logs":
-    Container.logs(args.container_name)
+    Container.logs(args.container_id)
 elif args.subcommand == "exec":
-    Container.exec(args.container_name, args.command)
+    Container.exec(args.container_id, args.command)
 elif args.subcommand == "stop":
-    Container.stop(args.container_name)
+    Container.stop(args.container_id)
