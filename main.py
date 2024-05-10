@@ -78,6 +78,9 @@ commit_parser.add_argument("image_name")
 
 ps_parser = subparsers.add_parser("ps", help="list all the containers")
 
+logs_parser = subparsers.add_parser("logs", help="print logs of a container")
+logs_parser.add_argument("container_name")
+
 args = parser.parse_args()
 print(args)
 if args.subcommand == "run":
@@ -96,3 +99,5 @@ elif args.subcommand == "commit":
     Container.commit(args.image_name)
 elif args.subcommand == "ps":
     Container.ps()
+elif args.subcommand == "logs":
+    Container.logs(args.container_name)

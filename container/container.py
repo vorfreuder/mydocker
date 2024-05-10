@@ -27,7 +27,7 @@ class Container:
         self.volume = volume
         self.resource_config = resource_config
         self.tty = tty
-        self.id = str(uuid.uuid4())
+        self.id = "".join(str(uuid.uuid4()).split("-"))[:10]
         self.container_name = container_name
         if container_name is None:
             self.container_name = self.id
@@ -56,11 +56,16 @@ class Container:
         if pid == 0:
             if not self.tty:
                 print("not tty")
-                null_fd = os.open("/dev/null", os.O_RDWR)
-                os.dup2(null_fd, 0)  # 重定向标准输入
-                os.dup2(null_fd, 1)  # 重定向标准输出
-                os.dup2(null_fd, 2)  # 重定向标准错误
-                os.close(null_fd)
+                fd_path = os.path.join(info_path, self.container_name)
+                os.makedirs(fd_path, exist_ok=True)
+                fd = os.open(
+                    os.path.join(fd_path, self.container_name + "-json.log"),
+                    os.O_RDWR | os.O_CREAT,
+                )
+                os.dup2(fd, 0)  # 重定向标准输入
+                os.dup2(fd, 1)  # 重定向标准输出
+                os.dup2(fd, 2)  # 重定向标准错误
+                os.close(fd)
             cgroup_manager.set(self.resource_config)
             cgroup_manager.apply(pid)
             os.execve(cmd[0], cmd, os.environ)
@@ -220,3 +225,13 @@ class Container:
                 container_info = json.load(json_file)
                 data.append([str(container_info[field]) for field in header])
         print(tabulate(data, headers=header))
+
+    @staticmethod
+    def logs(container_name):
+        log_path = os.path.join(info_path, container_name, container_name + "-json.log")
+        if not os.path.exists(log_path):
+            print("no logs available")
+            return
+        with open(log_path) as f:
+            for line in f:
+                print(line, end="")
