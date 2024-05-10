@@ -85,6 +85,9 @@ exec_parser = subparsers.add_parser("exec", help="exec a command into container"
 exec_parser.add_argument("container_name")
 exec_parser.add_argument("command", nargs="+")
 
+stop_parser = subparsers.add_parser("stop", help="stop a container")
+stop_parser.add_argument("container_name")
+
 args = parser.parse_args()
 print(args)
 if args.subcommand == "run":
@@ -107,3 +110,5 @@ elif args.subcommand == "logs":
     Container.logs(args.container_name)
 elif args.subcommand == "exec":
     Container.exec(args.container_name, args.command)
+elif args.subcommand == "stop":
+    Container.stop(args.container_name)

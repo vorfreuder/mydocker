@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import signal
 import sys
 import tarfile
 import uuid
@@ -189,6 +190,17 @@ class Container:
         with tarfile.open(image_url, "w") as tar:
             tar.add(mnt_url, arcname=".")
 
+    @staticmethod
+    def set_container_info(container_id, kv):
+        container_info = Container.get_info_by_container_id(container_id)
+        for k, v in kv.items():
+            container_info[k] = v
+        os.makedirs(os.path.join(info_path, container_id), exist_ok=True)
+        with open(
+            os.path.join(info_path, container_id, "config.json"), "w"
+        ) as json_file:
+            json.dump(container_info, json_file, indent=4)
+
     def record_container_info(self):
         container_info = {
             "ID": self.id,
@@ -198,10 +210,7 @@ class Container:
             "STATUS": "running",
             "NAME": self.container_name,
         }
-        path = os.path.join(info_path, self.id)
-        os.makedirs(path, exist_ok=True)
-        with open(os.path.join(path, "config.json"), "w") as json_file:
-            json.dump(container_info, json_file, indent=4)
+        Container.set_container_info(self.id, container_info)
 
     def delete_container_info(self):
         path = os.path.join(info_path, self.id)
@@ -237,11 +246,18 @@ class Container:
                 print(line, end="")
 
     @staticmethod
-    def exec(container_name, command):
-        container_path = os.path.join(info_path, container_name)
-        with open(os.path.join(container_path, "config.json")) as json_file:
+    def get_info_by_container_id(container_id):
+        container_info = {}
+        config_path = os.path.join(info_path, container_id, "config.json")
+        if not os.path.exists(config_path):
+            return {}
+        with open(config_path) as json_file:
             container_info = json.load(json_file)
-        pid = container_info["PID"]
+        return container_info
+
+    @staticmethod
+    def exec(container_name, command):
+        pid = Container.get_info_by_container_id(container_name)["PID"]
         # os.system(f"nsenter --target {pid} --mount --uts --ipc --net --pid {command}")
         ns = ["ipc", "mnt", "net", "pid", "uts"]
         for ns_file in os.listdir(f"/proc/{pid}/ns"):
@@ -252,3 +268,12 @@ class Container:
             os.setns(fd)
             os.close(fd)
         os.execve(command[0], command, os.environ)
+
+    @staticmethod
+    def stop(container_name):
+        container_info = Container.get_info_by_container_id(container_name)
+        pid = container_info["PID"]
+        os.kill(pid, signal.SIGKILL)
+        container_info["PID"] = ""
+        container_info["STATUS"] = "stopped"
+        Container.set_container_info(container_name, container_info)
