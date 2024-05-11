@@ -55,6 +55,10 @@ run_parser.add_argument(
     help="container name",
 )
 run_parser.add_argument(
+    "image_name",
+    help="image name,e.g.: busybox.tar",
+)
+run_parser.add_argument(
     "command",
     nargs="+",
     help="Command to run in the container",
@@ -71,6 +75,7 @@ init_parser.add_argument(
 )
 
 commit_parser = subparsers.add_parser("commit", help="commit container to image")
+commit_parser.add_argument("container_id")
 commit_parser.add_argument("image_name")
 
 ps_parser = subparsers.add_parser("ps", help="list all the containers")
@@ -94,6 +99,7 @@ print(args)
 if args.subcommand == "run":
     con = Container(
         args.command,
+        args.image_name,
         args.name,
         args.v,
         {"cpu": args.cpu, "cpuset": args.cpuset, "mem": args.mem},
@@ -104,7 +110,7 @@ elif args.subcommand == "init":
     con = Container(args.command)
     con.init()
 elif args.subcommand == "commit":
-    Container.commit(args.image_name)
+    Container.commit(args.container_id, args.image_name)
 elif args.subcommand == "ps":
     Container.ps()
 elif args.subcommand == "logs":

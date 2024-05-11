@@ -12,13 +12,25 @@ from utility import *
 
 from .cgroup_manager import CgroupManager
 
+base_path = os.path.dirname(os.path.dirname(__file__))
+info_path = os.path.join(base_path, "info")
+images_path = os.path.join(base_path, "images")
+overlay_path = os.path.join(base_path, "overlay")
+
 
 class Container:
     def __init__(
-        self, command, container_name=None, volume=None, resource_config={}, tty=False
+        self,
+        command,
+        image_name="busybox.tar",
+        container_name=None,
+        volume=None,
+        resource_config={},
+        tty=False,
     ) -> None:
         if command is str:
             command = command.split()
+        self.image_name = image_name
         self.cmd = command
         cmd_path = shutil.which(self.cmd[0])
         if cmd_path is None:
@@ -83,7 +95,7 @@ class Container:
                 return
             os.waitpid(pid, 0)
             cgroup_manager.remove()
-            self.delete_work_space()
+            Container.delete_work_space(self.container_id, self.volume)
             self.delete_container_info()
 
     def init(self):
@@ -124,7 +136,8 @@ class Container:
         os.system(f"umount {pivotDir} -l")
         os.rmdir(pivotDir)
 
-    def volume_extract(self, volume):
+    @staticmethod
+    def volume_extract(volume):
         volume_path = volume.split(":")
         if len(volume_path) != 2:
             print("volume格式错误")
@@ -132,16 +145,16 @@ class Container:
         return volume_path[0], volume_path[1]
 
     def new_work_space(self):
-        root_url = os.path.join(base_path, "root")
+        root_url = os.path.join(overlay_path, self.container_id)
         if os.path.exists(root_url):
             shutil.rmtree(root_url)
-        os.mkdir(root_url, mode=0o777)
+        os.makedirs(root_url, mode=0o777)
         # create lower
-        busybox_path = os.path.join(base_path, "busybox.tar")
+        image_path = os.path.join(images_path, self.image_name)
         lower_path = os.path.join(root_url, "lower")
         if not os.path.exists(lower_path):
             os.mkdir(lower_path, mode=0o777)
-            with tarfile.open(busybox_path, "r") as tar:
+            with tarfile.open(image_path, "r") as tar:
                 tar.extractall(lower_path)
         # create upper、worker
         upper_path = os.path.join(root_url, "upper")
@@ -158,7 +171,7 @@ class Container:
         os.chdir(mnt_url)
         # 如果指定了volume则还需要mount volume
         if self.volume:
-            host_path, container_path = self.volume_extract(self.volume)
+            host_path, container_path = Container.volume_extract(self.volume)
             container_path = container_path.strip("/")
             # 通过bind mount 将宿主机目录挂载到容器目录
             os.makedirs(host_path, mode=0o777, exist_ok=True)
@@ -166,27 +179,29 @@ class Container:
             os.makedirs(container_path, mode=0o777, exist_ok=True)
             os.system(f"mount -o bind {host_path} {container_path}")
 
-    def delete_work_space(self):
-        root_url = os.path.join(base_path, "root")
+    @staticmethod
+    def delete_work_space(container_id, volume):
+        root_url = os.path.join(overlay_path, container_id)
         mnt_url = os.path.join(root_url, "merged")
         # 一定要要先 umount volume ，然后再删除目录，否则由于 bind mount 存在，删除临时目录会导致 volume 目录中的数据丢失
-        if self.volume:
-            host_path, container_path = self.volume_extract(self.volume)
+        if volume:
+            host_path, container_path = Container.volume_extract(volume)
             container_path = os.path.join(mnt_url, container_path.strip("/"))
             os.system(f"umount {container_path}")
         # unmount overlayfs：将../root/merged目录挂载解除
         os.system(f"umount {mnt_url}")
-        shutil.rmtree(mnt_url)
-        # 删除其他目录：删除之前为 overlayfs 准备的 upper、work、merged 目录
-        upper_path = os.path.join(root_url, "upper")
-        shutil.rmtree(upper_path)
-        work_path = os.path.join(root_url, "work")
-        shutil.rmtree(work_path)
+        # shutil.rmtree(mnt_url)
+        # # 删除其他目录：删除之前为 overlayfs 准备的 upper、work、merged 目录
+        # upper_path = os.path.join(root_url, "upper")
+        # shutil.rmtree(upper_path)
+        # work_path = os.path.join(root_url, "work")
+        # shutil.rmtree(work_path)
+        shutil.rmtree(root_url)
 
     @staticmethod
-    def commit(image_name):
-        mnt_url = os.path.join(base_path, "root", "merged")
-        image_url = os.path.join(base_path, "root", f"{image_name}.tar")
+    def commit(container_id, image_name):
+        mnt_url = os.path.join(overlay_path, container_id, "merged")
+        image_url = os.path.join(images_path, f"{image_name}.tar")
         with tarfile.open(image_url, "w") as tar:
             tar.add(mnt_url, arcname=".")
 
@@ -209,6 +224,7 @@ class Container:
             "CREATE_TIME": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "STATUS": "running",
             "NAME": self.container_name,
+            "Volume": self.volume,
         }
         Container.set_container_info(self.container_id, container_info)
 
@@ -288,3 +304,4 @@ class Container:
                 return
             Container.stop(container_id)
         shutil.rmtree(os.path.join(info_path, container_id))
+        Container.delete_work_space(container_id, container_info["Volume"])

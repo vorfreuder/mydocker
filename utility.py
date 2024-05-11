@@ -51,7 +51,3 @@ def pivot_root(new_root, put_old):
     result = libc.pivot_root(new_root.encode(), put_old.encode())
     if result != 0:
         raise OSError("pivot_root failed")
-
-
-base_path = os.path.dirname(__file__)
-info_path = os.path.join(base_path, "info")
