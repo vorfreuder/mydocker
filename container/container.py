@@ -25,6 +25,7 @@ class Container:
         image_name="busybox.tar",
         container_name=None,
         volume=None,
+        env=None,
         resource_config={},
         tty=False,
     ) -> None:
@@ -39,6 +40,10 @@ class Container:
         self.cmd[0] = cmd_path
         self.volume = volume
         self.resource_config = resource_config
+        if env:
+            envs = {key: value for key, value in [e.split("=") for e in env]}
+            os.environ.update(envs)
+            self.env = envs
         self.tty = tty
         self.container_id = "".join(str(uuid.uuid4()).split("-"))[:10]
         self.container_name = container_name
@@ -274,15 +279,21 @@ class Container:
     @staticmethod
     def exec(container_id, command):
         pid = Container.get_info_by_container_id(container_id)["PID"]
+        with open(f"/proc/{pid}/environ") as f:
+            env = f.read().strip("\x00").split("\x00")
+            os.environ.update({e.split("=")[0]: e.split("=")[1] for e in env})
         # os.system(f"nsenter --target {pid} --mount --uts --ipc --net --pid {command}")
-        ns = ["ipc", "mnt", "net", "pid", "uts"]
-        for ns_file in os.listdir(f"/proc/{pid}/ns"):
-            if ns_file not in ns:
-                continue
-            ns_path = os.path.join(f"/proc/{pid}/ns", ns_file)
-            fd = os.open(ns_path, os.O_RDONLY)
-            os.setns(fd)
-            os.close(fd)
+        # 先拿到所有的 namespace 文件描述符
+        fds = [
+            os.open(ns_path, os.O_RDONLY)
+            for ns_path in [
+                f"/proc/{pid}/ns/{ns_file}"
+                for ns_file in ["ipc", "mnt", "net", "pid", "uts"]
+            ]
+        ]
+        for ns_fd in fds:
+            os.setns(ns_fd, 0)
+            os.close(ns_fd)
         os.execve(command[0], command, os.environ)
 
     @staticmethod

@@ -59,6 +59,11 @@ run_parser.add_argument(
     help="image name,e.g.: busybox.tar",
 )
 run_parser.add_argument(
+    "-e",
+    action="append",
+    help="set environment,e.g. -e name=mydocker",
+)
+run_parser.add_argument(
     "command",
     nargs="+",
     help="Command to run in the container",
@@ -102,6 +107,7 @@ if args.subcommand == "run":
         args.image_name,
         args.name,
         args.v,
+        args.e,
         {"cpu": args.cpu, "cpuset": args.cpuset, "mem": args.mem},
         args.it,
     )
