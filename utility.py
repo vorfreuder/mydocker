@@ -1,6 +1,8 @@
 import ctypes
 import ctypes.util
 import os
+import subprocess
+import sys
 
 libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
 libc.mount.argtypes = (
@@ -51,3 +53,11 @@ def pivot_root(new_root, put_old):
     result = libc.pivot_root(new_root.encode(), put_old.encode())
     if result != 0:
         raise OSError("pivot_root failed")
+
+
+def shell(command, exit_if_error=True):
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    if result.returncode != 0 and exit_if_error:
+        print(result.stderr)
+        sys.exit(1)
+    return result.stdout

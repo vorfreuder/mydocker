@@ -1,6 +1,7 @@
 import argparse
 
 from container import *
+from network import *
 
 parser = argparse.ArgumentParser(
     # prog="mydocker",
@@ -64,6 +65,16 @@ run_parser.add_argument(
     help="set environment,e.g. -e name=mydocker",
 )
 run_parser.add_argument(
+    "-net",
+    default=None,
+    help="container network, e.g. -net testbr",
+)
+run_parser.add_argument(
+    "-p",
+    action="append",
+    help="port mapping,e.g. -p 8080:80 -p 30336:3306",
+)
+run_parser.add_argument(
     "command",
     nargs="+",
     help="Command to run in the container",
@@ -99,6 +110,23 @@ rm_parser = subparsers.add_parser("rm", help="remove unused containers")
 rm_parser.add_argument("-f", action="store_true", help="force delete running container")
 rm_parser.add_argument("container_id")
 
+network_parser = subparsers.add_parser("network", help="container network commands")
+network_subparsers = network_parser.add_subparsers(dest="subcommand")
+
+create_parser = network_subparsers.add_parser(
+    "create", help="create a container network"
+)
+create_parser.add_argument(
+    "--driver", required=True, help="network driver, e.g.: bridge"
+)
+create_parser.add_argument("--subnet", required=True, help="subnet cidr")
+create_parser.add_argument("name", help="network name")
+
+list_parser = network_subparsers.add_parser("list", help="list container network")
+
+remove_parser = network_subparsers.add_parser("remove", help="remove container network")
+remove_parser.add_argument("network_name", help="network name")
+
 args = parser.parse_args()
 print(args)
 if args.subcommand == "run":
@@ -109,6 +137,8 @@ if args.subcommand == "run":
         args.v,
         args.e,
         {"cpu": args.cpu, "cpuset": args.cpuset, "mem": args.mem},
+        args.net,
+        args.p,
         args.it,
     )
     con.run()
@@ -127,3 +157,9 @@ elif args.subcommand == "stop":
     Container.stop(args.container_id)
 elif args.subcommand == "rm":
     Container.rm(args.container_id, args.f)
+elif args.subcommand == "create":
+    Network.create(args.name, args.subnet, args.driver)
+elif args.subcommand == "list":
+    Network.list()
+elif args.subcommand == "remove":
+    Network.remove(args.network_name)

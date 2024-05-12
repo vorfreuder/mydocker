@@ -7,6 +7,7 @@ import tarfile
 import uuid
 from datetime import datetime
 
+from network import *
 from tabulate import tabulate
 from utility import *
 
@@ -27,6 +28,8 @@ class Container:
         volume=None,
         env=None,
         resource_config={},
+        network=None,
+        port_mapping=None,
         tty=False,
     ) -> None:
         if command is str:
@@ -40,6 +43,8 @@ class Container:
         self.cmd[0] = cmd_path
         self.volume = volume
         self.resource_config = resource_config
+        self.network = network
+        self.port_mapping = port_mapping
         if env:
             envs = {key: value for key, value in [e.split("=") for e in env]}
             os.environ.update(envs)
@@ -95,13 +100,15 @@ class Container:
                 os.setns(fd)
                 os.close(fd)
             self.pid = pid
-            self.record_container_info()
+            container_info = self.record_container_info()
+            Network.connect(self.network, container_info)
             if not self.tty:
                 return
             os.waitpid(pid, 0)
             cgroup_manager.remove()
             Container.delete_work_space(self.container_id, self.volume)
             self.delete_container_info()
+            Network.disconnect(container_info)
 
     def init(self):
         self.setUpMount()
@@ -229,9 +236,12 @@ class Container:
             "CREATE_TIME": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "STATUS": "running",
             "NAME": self.container_name,
-            "Volume": self.volume,
+            "VOLUME": self.volume,
+            "NETWORK": self.network,
+            "PORTMAPPING": self.port_mapping,
         }
         Container.set_container_info(self.container_id, container_info)
+        return container_info
 
     def delete_container_info(self):
         path = os.path.join(info_path, self.container_id)
