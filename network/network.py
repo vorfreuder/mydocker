@@ -39,31 +39,38 @@ class Network:
         if driver not in drivers:
             raise Exception(f"Driver {driver} not found")
         subnet = ipaddress.ip_network(subnet, strict=True)
-        ip = IPAM().allocate(subnet)
-        drivers[driver].create(subnet, ip, name)
+        ip_interface = IPAM().allocate(subnet)
+        drivers[driver].create(subnet, ip_interface, name)
         Network.dump(
             default_network_path,
             name,
-            {"NAME": name, "IpRange": str(subnet), "IP": str(ip.ip), "Driver": driver},
+            {
+                "NAME": name,
+                "IpRange": str(subnet),
+                "IP": str(ip_interface.ip),
+                "Driver": driver,
+            },
         )
 
     @staticmethod
-    def connect(name, container_info):
+    def connect(network_name, container_info):
+        if network_name is None:
+            return
         drivers = Network.init()
         # 从networks字典中取到容器连接的网络的信息，networks字典中保存了当前己经创建的网络
         networks = Network.load()
-        if name not in networks:
-            raise Exception(f"Network {name} not found")
-        network = networks[name]
+        if network_name not in networks:
+            raise Exception(f"Network {network_name} not found")
+        network = networks[network_name]
         # 分配容器IP地址
-        ip = IPAM().allocate(network["IpRange"])
+        ip_interface = IPAM().allocate(network["IpRange"])
         # 创建网络端点
         endpoint = {
             "ID": container_info["ID"],
-            "IP": ip,
+            "IPINTERFACE": ip_interface,
             "PORTMAPPING": container_info["PORTMAPPING"],
         }
-        container_info["IP"] = ip.ip
+        container_info["IP"] = ip_interface.ip
         # 调用网络驱动挂载和配置网络端点
         drivers[network["Driver"]].connect(network, endpoint)
         # 到容器的namespace配置容器网络设备IP地址
@@ -78,7 +85,7 @@ class Network:
         command = f"ip link set {peer_veth_name} netns {container_info['PID']}"
         shell(command)
         # 设置容器端口IP地址
-        command = f"nsenter -t {container_info['PID']} -n -- ip addr add {endpoint['IP']} dev {peer_veth_name}"
+        command = f"nsenter -t {container_info['PID']} -n -- ip addr add {endpoint['IPINTERFACE']} dev {peer_veth_name}"
         shell(command)
         # 启动容器端口
         command = f"nsenter -t {container_info['PID']} -n -- ip link set dev {peer_veth_name} up"
@@ -94,9 +101,11 @@ class Network:
     def config_port_mapping(endpoint):
         if endpoint["PORTMAPPING"] is None:
             return
+        # iptables -t filter -L 一般缺省策略都是 ACCEPT，不需要改动，如果如果缺省策略是DROP，需要设置为ACCEPT：
+        shell("iptables -t filter -P FORWARD ACCEPT")
         for port_mapping in endpoint["PORTMAPPING"]:
             host_port, container_port = port_mapping.split(":")
-            endpoint_ip = endpoint["IP"].ip
+            endpoint_ip = endpoint["IPINTERFACE"].ip
             command = f"iptables -t nat -A PREROUTING -p tcp -m tcp --dport {host_port} -j DNAT --to-destination {endpoint_ip}:{container_port}"
             shell(command)
 

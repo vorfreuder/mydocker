@@ -36,11 +36,6 @@ class Container:
             command = command.split()
         self.image_name = image_name
         self.cmd = command
-        cmd_path = shutil.which(self.cmd[0])
-        if cmd_path is None:
-            print(f"未找到命令 {' '.join(self.cmd)}")
-            sys.exit(1)
-        self.cmd[0] = cmd_path
         self.volume = volume
         self.resource_config = resource_config
         self.network = network
@@ -146,7 +141,8 @@ class Container:
         pivotDir = os.path.join("/", ".pivot_root")
         # umount(pivotDir, MNT_DETACH)不知道为什么会导致后面没法挂载/proc
         os.system(f"umount {pivotDir} -l")
-        os.rmdir(pivotDir)
+        # os.rmdir(pivotDir)
+        os.system(f"rmdir {pivotDir}")
 
     @staticmethod
     def volume_extract(volume):
@@ -291,7 +287,11 @@ class Container:
         pid = Container.get_info_by_container_id(container_id)["PID"]
         with open(f"/proc/{pid}/environ") as f:
             env = f.read().strip("\x00").split("\x00")
-            os.environ.update({e.split("=")[0]: e.split("=")[1] for e in env})
+            for e in env:
+                e = e.split("=")
+                if len(e) != 2:
+                    continue
+                os.environ.update({e[0]: e[1]})
         # os.system(f"nsenter --target {pid} --mount --uts --ipc --net --pid {command}")
         # 先拿到所有的 namespace 文件描述符
         fds = [
